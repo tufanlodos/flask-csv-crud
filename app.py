@@ -6,7 +6,7 @@ To run (after environment setup):
 
 import csv
 from flask import Flask, request, Response
-import repos.utils as utils
+from repos import utils
 from repos.constants import CSV_FILE, CSV_FIELDS
 
 
@@ -49,7 +49,8 @@ def create_user():
         with open(CSV_FILE, "a") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
 
-            if user_id == 1:
+            users_with_headers = utils.read_users(include_headers=True)
+            if len(users_with_headers) == 0:
                 writer.writeheader()
 
             writer.writerow({
@@ -65,9 +66,50 @@ def create_user():
 
 @app.route("/user", methods=["PUT"])
 def update_user():
-    return "Update User"
+    data = request.get_json()
+    if not data or not "id" in data:
+        return Response("Invalid data", status=400)
+
+    user_index = -1
+    users = utils.read_users()
+    user = next((item for item in users if item['id'] == data["id"]), None)
+    if user is None:
+        return Response("User not found", status=404)
+    else:
+        user_index = users.index(user)
+
+    try:
+        with open(CSV_FILE, "w") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+
+            if "name" in data:
+                users[user_index]["name"] = data["name"]
+            if "surname" in data:
+                users[user_index]["surname"] = data["surname"]
+            if "age" in data:
+                users[user_index]["age"] = data["age"]
+
+            writer.writeheader()
+            writer.writerows(users)
+        return Response("User updated", status=200)
+    except Exception as error:
+        return Response(f"Error: {error}", status=500)
 
 
 @app.route("/user/<user_id>", methods=["DELETE"])
 def delete_user(user_id):
-    return f"Delete user with ID: {user_id}"
+    users = utils.read_users()
+    user = next((item for item in users if item['id'] == user_id), None)
+    if user is None:
+        return Response("User not found", status=404)
+    else:
+        users.remove(user)
+
+    try:
+        with open(CSV_FILE, "w") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+            writer.writeheader()
+            writer.writerows(users)
+        return Response("User deleted", status=200)
+    except Exception as error:
+        return Response(f"Error: {error}", status=500)
